@@ -291,4 +291,4 @@ streamlit run app.py
 
 7. Authors
 . Project developed for the Python / Git / Linux course (ESILV)
-. Quant B module developed by: nathanaelboquet
+. Quant B module developed by: nathanaelbcoquet
