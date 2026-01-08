@@ -249,18 +249,17 @@ Project: Python Backtesting – Quant B Module
 
 4. Installation and execution
 
-4.1. Clone the repository
-```bash
 git clone https://github.com/benjatt974/PROJET-PYTHON-GIT-LINUX.git
 cd PROJET-PYTHON-GIT-LINUX
+
 4.2. Create and activate a virtual environment
 
 python -m venv .venv
 .venv\Scripts\Activate.ps1
+
 4.3. Install dependencies
 
 pip install -r requirements.txt
-
 
 4.4. Run the Streamlit app
 
@@ -268,28 +267,28 @@ streamlit run app.py
 . The app runs at:
 . http://localhost:8501
 
-5 Scenario-based validation (coherent tests)
+5. Scenario-based validation (coherent tests)
 
 5.1. Bull market / trending period
-. Example: 2020 → 2021 (QQQ/AAPL/MSFT/GLD)
+. Example: 2020 -> 2021 (QQQ/AAPL/MSFT/GLD)
 . Buy & Hold should perform strongly
 . Max Sharpe often performs well but may concentrate weights
 . Diversification reduces volatility and stabilizes drawdowns
 . Sharpe should be relatively high
 
 5.2. Bear market / stress period
-. Example: 2021 → 2022 (risk assets + bonds)
+. Example: 2021 -> 2022 (risk assets + bonds)
 . Buy & Hold can suffer large drawdowns
 . MA Cross reduces exposure and limits losses
 . Correlation matrix and diversification ratio become very useful
 
-6 Possible improvements (optional)
+6. Possible improvements (optional)
 . Add more allocation methods (Risk Parity, Equal Risk Contribution)
 . Add transaction costs / slippage
 . Add periodic rebalancing (weekly / monthly)
 . Add a signal chart (invested vs cash) for MA Cross
 . Add benchmark comparison (e.g., SPY)
 
- 7 Authors
-. Project developed for the Python / Git / Linux course (ESILV).
+7. Authors
+. Project developed for the Python / Git / Linux course (ESILV)
 . Quant B module developed by: nathanaelboquet
