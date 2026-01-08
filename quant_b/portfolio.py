@@ -62,4 +62,55 @@ def backtest_ma_cross(port_value: pd.Series, short: int, long: int) -> pd.Series
 
 def corr_matrix(prices: pd.DataFrame) -> pd.DataFrame:
     return compute_returns(prices).corr()
+def annualized_volatility(port_rets: pd.Series) -> float:
+    return float(port_rets.std() * np.sqrt(TRADING_DAYS))
+
+def min_variance_weights(prices: pd.DataFrame, long_only: bool = True) -> pd.Series:
+    rets = compute_returns(prices)
+    cov = rets.cov().values
+    n = cov.shape[0]
+    cov = cov + 1e-8 * np.eye(n)  # stabilisation
+
+    ones = np.ones(n)
+    inv = np.linalg.inv(cov)
+    w = inv @ ones
+    w = w / w.sum()
+
+    if long_only:
+        w = np.clip(w, 0, None)
+        w = w / w.sum()
+
+    return pd.Series(w, index=rets.columns)
+
+def max_sharpe_weights(prices: pd.DataFrame, rf: float = 0.0, long_only: bool = True) -> pd.Series:
+    rets = compute_returns(prices)
+    mu = rets.mean().values * TRADING_DAYS
+    cov = rets.cov().values * TRADING_DAYS
+    n = cov.shape[0]
+    cov = cov + 1e-8 * np.eye(n)
+
+    inv = np.linalg.inv(cov)
+    w = inv @ (mu - rf)
+    if w.sum() == 0:
+        w = np.ones(n)
+
+    w = w / w.sum()
+
+    if long_only:
+        w = np.clip(w, 0, None)
+        w = w / w.sum()
+
+    return pd.Series(w, index=rets.columns)
+
+def diversification_ratio(prices: pd.DataFrame, weights: pd.Series) -> float:
+    rets = compute_returns(prices)
+    vol_assets = rets.std() * np.sqrt(TRADING_DAYS)
+    w = weights.reindex(rets.columns).fillna(0)
+    w = w / w.sum()
+
+    port_vol = float((rets.dot(w)).std() * np.sqrt(TRADING_DAYS))
+    if port_vol == 0:
+        return 0.0
+    return float((w * vol_assets).sum() / port_vol)
+
 
