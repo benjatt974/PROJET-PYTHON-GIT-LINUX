@@ -45,7 +45,7 @@ def run_quant_b_page():
         weights = pd.Series(w_dict)
 
     # Stratégie
-    st.subheader("Stratégie (comme Quant A, appliquée au portefeuille)")
+    st.subheader("Stratégie")
     use_ma = st.checkbox("Activer MA Cross sur le portefeuille", value=True)
     short = st.slider("MA courte", 5, 100, 20)
     long = st.slider("MA longue", 10, 300, 50)
