@@ -1,255 +1,180 @@
-import streamlit as st
 import pandas as pd
 import numpy as np
 
-from quant_b.data_multi_asset import get_price_history_multi
-from quant_b.portfolio import (
-    equal_weights, portfolio_returns, portfolio_value,
-    sharpe_ratio, max_drawdown, total_return,
-    backtest_ma_cross, corr_matrix,
-    annualized_volatility, diversification_ratio,
-    min_variance_weights, max_sharpe_weights
-)
+TRADING_DAYS = 252
 
-# ---- Petit style dark + cartes
-DARK_CSS = """
-<style>
-.block-container {padding-top: 1.2rem;}
-.card {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 14px;
-  padding: 16px 16px;
-}
-.small {opacity:0.8; font-size: 0.9rem;}
-.tickerbar{
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 14px;
-  padding: 10px 14px;
-  overflow-x:auto;
-  white-space: nowrap;
-}
-.titem{display:inline-block; margin-right:16px; font-weight:600;}
-.pos{color:#30d158;}
-.neg{color:#ff453a;}
-</style>
-"""
 
-def _ticker_bar(prices: pd.DataFrame):
-    # dernier close + variation 1j
-    if prices.shape[0] < 2:
-        return
-    last = prices.iloc[-1]
-    prev = prices.iloc[-2]
-    chg = (last / prev - 1.0) * 100
+# -----------------------------
+# Basics
+# -----------------------------
+def compute_returns(prices: pd.DataFrame) -> pd.DataFrame:
+    """Daily returns from price dataframe."""
+    return prices.pct_change().dropna()
 
-    html = '<div class="tickerbar">'
-    for t in prices.columns:
-        c = chg[t]
-        cls = "pos" if c >= 0 else "neg"
-        html += f'<span class="titem">{t}  ${last[t]:.2f}  <span class="{cls}">{c:+.2f}%</span></span>'
-    html += "</div>"
-    st.markdown(html, unsafe_allow_html=True)
 
-def run_quant_b_page():
-    st.markdown(DARK_CSS, unsafe_allow_html=True)
+def equal_weights(tickers) -> pd.Series:
+    w = np.ones(len(tickers)) / len(tickers)
+    return pd.Series(w, index=tickers)
 
-    # Layout type "panel gauche + dashboard droite"
-    left, right = st.columns([1.05, 2.95], gap="large")
 
-    with left:
-        st.markdown("## Portfolio Controls")
+def _normalize_weights(weights: pd.Series) -> pd.Series:
+    s = float(weights.sum())
+    if s == 0:
+        # fallback equal weights
+        w = np.ones(len(weights)) / len(weights)
+        return pd.Series(w, index=weights.index)
+    return weights / s
 
-        tickers = st.multiselect(
-            "Selected Assets (min 3)",
-            ["SPY", "QQQ", "TLT", "GLD", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "BTC-USD", "ETH-USD"],
-            default=["AAPL", "MSFT", "GOOGL", "BTC-USD", "META"],
-        )
 
-        if len(tickers) < 3:
-            st.warning("Sélectionne au moins 3 actifs.")
-            return
+def portfolio_returns(prices: pd.DataFrame, weights: pd.Series) -> pd.Series:
+    rets = compute_returns(prices)
+    w = weights.reindex(prices.columns).fillna(0)
+    w = _normalize_weights(w)
+    port = rets.dot(w)
+    port.name = "portfolio_returns"
+    return port
 
-        col1, col2 = st.columns(2)
-        with col1:
-            start = st.date_input("Start", value=pd.to_datetime("2021-01-01"))
-        with col2:
-            end = st.date_input("End", value=pd.to_datetime("today"))
 
-        st.markdown("### Weighting Strategy")
-        strategy = st.selectbox(
-            "Allocation",
-            ["Equal Weights", "Minimum Variance", "Max Sharpe Ratio", "Custom Weights"],
-            index=2
-        )
-        long_only = st.checkbox("Long-only (pas de poids négatifs)", value=True)
+def portfolio_value_from_returns(port_rets: pd.Series, initial: float = 1000.0) -> pd.Series:
+    val = float(initial) * (1 + port_rets).cumprod()
+    val.name = "portfolio_value"
+    return val
 
-        initial_capital = st.number_input("Capital initial", value=1000.0, step=100.0)
 
-        st.markdown("### Strategy (MA Cross on portfolio)")
-        use_ma = st.checkbox("Enable MA Cross", value=True)
-        short = st.slider("MA short", 5, 100, 20)
-        long = st.slider("MA long", 10, 300, 50)
+def portfolio_value(prices: pd.DataFrame, weights: pd.Series, initial: float = 1000.0) -> pd.Series:
+    port_rets = portfolio_returns(prices, weights)
+    return portfolio_value_from_returns(port_rets, initial=initial)
 
-        run = st.button("▶ Run Backtest", use_container_width=True)
 
-    with right:
-        st.markdown("# Portfolio Analysis")
-        st.markdown('<div class="small">Multi-assets • Allocation • MA Cross option</div>', unsafe_allow_html=True)
+# -----------------------------
+# Metrics
+# -----------------------------
+def max_drawdown(series: pd.Series) -> float:
+    peak = series.cummax()
+    dd = (series / peak) - 1.0
+    return float(dd.min())
 
-        if not run:
-            st.info("Configure à gauche puis clique sur **Run Backtest**.")
-            return
 
-        prices = get_price_history_multi(tickers, str(start), str(end)).dropna()
+def total_return(series: pd.Series) -> float:
+    return float(series.iloc[-1] / series.iloc[0] - 1.0)
 
-        _ticker_bar(prices)
 
-        # --- Weights
-        if strategy == "Equal Weights":
-            weights = equal_weights(prices.columns)
-        elif strategy == "Minimum Variance":
-            weights = min_variance_weights(prices, long_only=long_only)
-        elif strategy == "Max Sharpe Ratio":
-            weights = max_sharpe_weights(prices, rf=0.0, long_only=long_only)
-        else:
-            st.markdown("**Custom Weights** (ajuste puis normalisation)")
-            w = {}
-            for t in prices.columns:
-                w[t] = st.slider(f"{t}", 0.0, 1.0, 1.0/len(prices.columns), 0.01)
-            weights = pd.Series(w)
-            weights = weights / weights.sum()
+def sharpe_ratio(port_rets: pd.Series, rf: float = 0.0) -> float:
+    """rf annualized (e.g. 0.02)."""
+    excess = port_rets - (rf / TRADING_DAYS)
+    std = float(excess.std())
+    if std == 0 or np.isnan(std):
+        return 0.0
+    return float(np.sqrt(TRADING_DAYS) * excess.mean() / std)
 
-        # --- Portfolio series
-        port_val = portfolio_value(prices, weights, initial=initial_capital)
-        port_rets = portfolio_returns(prices, weights)
 
-        # --- Strategy on portfolio value
-        if use_ma and short < long:
-            strat_val = backtest_ma_cross(port_val, short=short, long=long)
-        else:
-            strat_val = port_val.copy()
-            strat_val.name = "strategy_value"
+def annualized_volatility(port_rets: pd.Series) -> float:
+    v = float(port_rets.std() * np.sqrt(TRADING_DAYS))
+    return 0.0 if np.isnan(v) else v
 
-        # --- Metrics cards
-        m1, m2, m3, m4 = st.columns(4)
-        port_ret = total_return(port_val) * 100
-        vol = annualized_volatility(port_rets) * 100
-        sr = sharpe_ratio(port_rets)
-        dr = diversification_ratio(prices, weights)
 
-        m1.markdown(f'<div class="card"><div class="small">Portfolio Return</div><div style="font-size:28px;font-weight:800">{port_ret:+.2f}%</div></div>', unsafe_allow_html=True)
-        m2.markdown(f'<div class="card"><div class="small">Portfolio Volatility</div><div style="font-size:28px;font-weight:800">{vol:.2f}%</div></div>', unsafe_allow_html=True)
-        m3.markdown(f'<div class="card"><div class="small">Sharpe Ratio</div><div style="font-size:28px;font-weight:800">{sr:.2f}</div></div>', unsafe_allow_html=True)
-        m4.markdown(f'<div class="card"><div class="small">Diversification Ratio</div><div style="font-size:28px;font-weight:800">{dr:.2f}</div></div>', unsafe_allow_html=True)
+def corr_matrix(prices: pd.DataFrame) -> pd.DataFrame:
+    return compute_returns(prices).corr()
 
-        st.markdown("### Portfolio Performance")
 
-        # Base 100 comparatif (assets + portfolio + strategy)
-        base100_assets = (prices / prices.iloc[0]) * 100
-        base100_port = (port_val / port_val.iloc[0]) * 100
-        base100_strat = (strat_val / strat_val.iloc[0]) * 100
+# -----------------------------
+# Strategy (MA cross on portfolio value)
+# -----------------------------
+def backtest_ma_cross(port_value: pd.Series, short: int, long: int) -> pd.Series:
+    """
+    MA cross applied on portfolio value:
+    - invested if short MA > long MA
+    - else cash
+    """
+    if short >= long:
+        out = port_value.copy()
+        out.name = "strategy_value"
+        return out
 
-        perf = base100_assets.copy()
-        perf["Portfolio"] = base100_port
-        perf["Strategy"] = base100_strat
-        st.line_chart(perf)
+    ma_s = port_value.rolling(short).mean()
+    ma_l = port_value.rolling(long).mean()
+    signal = (ma_s > ma_l).astype(int).fillna(0)
 
-        # Weights table
-        st.markdown("### Weights")
-        wdf = weights.sort_values(ascending=False).to_frame("weight")
-        st.dataframe((wdf * 100).round(2).rename(columns={"weight":"%"}), use_container_width=True)
+    rets = port_value.pct_change().fillna(0)
+    strat_rets = rets * signal.shift(1).fillna(0)  # take position next day
 
-        st.markdown("### Asset Correlation Matrix")
-        st.dataframe(corr_matrix(prices), use_container_width=True)
+    strat_val = portfolio_value_from_returns(strat_rets, initial=float(port_value.iloc[0]))
+    strat_val.name = "strategy_value"
+    return strat_val
 
-        st.markdown("### Drawdown")
-        dd = (port_val / port_val.cummax() - 1.0) * 100
-        st.line_chart(dd.to_frame("Drawdown (%)"))
 
-        prices = get_price_history_multi(tickers, str(p["start"]), str(p["end"]))
+# -----------------------------
+# Allocation optimizers
+# -----------------------------
+def min_variance_weights(prices: pd.DataFrame, long_only: bool = True) -> pd.Series:
+    """
+    Global minimum variance weights (closed form).
+    """
+    rets = compute_returns(prices)
+    if rets.empty:
+        return equal_weights(prices.columns)
 
-        # Portefeuille buy&hold
-        weights = equal_weights(tickers)
-        port_val = portfolio_value(prices, weights, initial=p["initial"])
-        port_rets = portfolio_returns(prices, weights)
+    cov = rets.cov().values
+    n = cov.shape[0]
+    cov = cov + 1e-8 * np.eye(n)  # stabilisation
 
-        # Stratégie MA cross sur portefeuille
-        if p["use_ma"] and p["short"] < p["long"]:
-            strat_val = backtest_ma_cross(port_val, short=p["short"], long=p["long"])
-        else:
-            strat_val = port_val.copy()
-            strat_val.name = "strategy_value"
+    ones = np.ones(n)
+    inv = np.linalg.pinv(cov)     # more robust than inv
+    w = inv @ ones
+    w = w / w.sum()
 
-        with results:
-            # Bandeau “ticker strip” (simple)
-            st.caption("Multi-assets • Allocation • MA Cross option")
+    w = pd.Series(w, index=rets.columns)
 
-            # Metrics cards
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Portfolio Return", f"{total_return(port_val)*100:.2f}%")
-            c2.metric("Portfolio Volatility", f"{(port_rets.std()*(252**0.5))*100:.2f}%")
-            c3.metric("Sharpe Ratio", f"{sharpe_ratio(port_rets):.2f}")
-            # “Diversification ratio” simplifié (optionnel)
-            c4.metric("Diversification", f"{(1.0 - corr_matrix(prices).values.mean()):.2f}")
+    if long_only:
+        w = w.clip(lower=0)
+        w = _normalize_weights(w)
 
-            st.subheader("Portfolio Performance")
-            base100_assets = (prices / prices.iloc[0]) * 100
-            base100_port = (port_val / port_val.iloc[0]) * 100
-            base100_strat = (strat_val / strat_val.iloc[0]) * 100
-            perf = base100_assets.copy()
-            perf["Portfolio"] = base100_port
-            perf["Strategy"] = base100_strat
-            st.line_chart(perf)
+    return w
 
-            st.subheader("Asset Correlation Matrix")
-            st.dataframe(corr_matrix(prices))
 
-    # --------- CONTROLS (bottom) ----------
-    st.markdown("---")
-    st.subheader("Portfolio Controls")
+def max_sharpe_weights(prices: pd.DataFrame, rf: float = 0.0, long_only: bool = True) -> pd.Series:
+    """
+    Max Sharpe weights (tangency portfolio, closed form).
+    rf annualized.
+    """
+    rets = compute_returns(prices)
+    if rets.empty:
+        return equal_weights(prices.columns)
 
-    with st.form("qb_controls", border=False):
-        tickers = st.multiselect(
-            "Selected Assets (min 3)",
-            ["SPY", "TLT", "GLD", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "BTC-USD", "ETH-USD"],
-            default=p["tickers"],
-        )
+    mu = rets.mean().values * TRADING_DAYS
+    cov = rets.cov().values * TRADING_DAYS
+    n = cov.shape[0]
+    cov = cov + 1e-8 * np.eye(n)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            start = st.date_input("Start", value=p["start"])
-        with col2:
-            end = st.date_input("End", value=p["end"])
+    inv = np.linalg.pinv(cov)
+    w = inv @ (mu - rf)
 
-        st.subheader("Weighting Strategy")
-        alloc_mode = st.selectbox("Allocation", ["Equal Weight", "Custom Weights"], index=0 if p["alloc_mode"] == "Equal Weight" else 1)
+    w = pd.Series(w, index=rets.columns)
+    if float(w.abs().sum()) == 0:
+        w = equal_weights(rets.columns)
 
-        st.checkbox("Long-only (pas de poids négatifs)", value=True, disabled=True)
-        initial = st.number_input("Capital initial", value=float(p["initial"]), step=100.0)
+    if long_only:
+        w = w.clip(lower=0)
 
-        st.subheader("Strategy (MA Cross on portfolio)")
-        use_ma = st.checkbox("Enable MA Cross", value=bool(p["use_ma"]))
-        short = st.slider("MA short", 5, 100, int(p["short"]))
-        long = st.slider("MA long", 10, 300, int(p["long"]))
+    w = _normalize_weights(w)
+    return w
 
-        submitted = st.form_submit_button("Lancer le backtest")
 
-    if submitted:
-        if len(tickers) < 3:
-            st.warning("Il faut sélectionner au moins 3 actifs.")
-        else:
-            st.session_state.qb_params.update({
-                "tickers": tickers,
-                "start": start,
-                "end": end,
-                "initial": initial,
-                "alloc_mode": alloc_mode,
-                "use_ma": use_ma,
-                "short": short,
-                "long": long,
-            })
-            st.session_state.qb_run = True
-            st.rerun()
+def diversification_ratio(prices: pd.DataFrame, weights: pd.Series) -> float:
+    """
+    Diversification Ratio = (sum w_i * vol_i) / vol_port
+    """
+    rets = compute_returns(prices)
+    if rets.empty:
+        return 0.0
 
+    vol_assets = rets.std() * np.sqrt(TRADING_DAYS)
+
+    w = weights.reindex(rets.columns).fillna(0)
+    w = _normalize_weights(w)
+
+    port_vol = float((rets.dot(w)).std() * np.sqrt(TRADING_DAYS))
+    if port_vol == 0 or np.isnan(port_vol):
+        return 0.0
+
+    return float((w * vol_assets).sum() / port_vol)
