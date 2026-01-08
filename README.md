@@ -158,3 +158,138 @@ Intégration avec le module Quant B (multi-actifs)
 
 Projet réalisé dans le cadre de l’UV Python / Git / Linux (ESILV).
 Module Quant A développé par : benjatt974
+
+Project: Python Backtesting – Quant B Module
+
+1. General description
+. This project is part of the Python / Git / Linux course.
+. The Quant B module focuses on multi-asset portfolio backtesting and analysis.
+. The application is built with Streamlit to provide an interactive dashboard.
+. Main features include:
+. Multi-asset data loading via yfinance
+. Portfolio allocation (weighting methods)
+. Portfolio backtest (Buy & Hold)
+. Optional MA Cross strategy applied to the portfolio value
+. Risk/return metrics and visualizations (base-100, drawdown, correlations)
+
+2. Main features of Quant B
+
+2.1. Multi-asset portfolio analysis
+. The user selects at least 3 tickers (example: AAPL, MSFT, GOOGL, BTC-USD, GLD, TLT).
+. Price data is downloaded from Yahoo Finance and aligned on a common date index.
+. Data loading file:
+. quant_b/data_multi_asset.py
+
+2.2. Portfolio allocation / weighting
+. Multiple allocation methods are available:
+. Equal Weights
+. Same weight for each selected asset (1/N)
+. Minimum Variance
+. Computes weights that minimize portfolio variance
+. Optional long-only constraint (no negative weights)
+. Max Sharpe Ratio
+. Computes weights that maximize a Sharpe-like objective
+. Optional long-only constraint (no negative weights)
+. Custom Weights
+. The user manually sets weights (then weights are normalized)
+. Allocation logic is implemented in:
+. quant_b/portfolio.py
+
+2.3. Implemented strategies
+. Two backtesting approaches are available:
+. Portfolio Buy & Hold
+. Allocate initial capital using selected weights, then hold until the end
+. MA Crossover on portfolio (optional)
+. Momentum strategy applied to the portfolio value
+. Compute short and long moving averages
+. Invested when short MA > long MA
+. Otherwise, move to cash (0 exposure)
+. Implemented in:
+. quant_b/portfolio.py (backtest_ma_cross)
+
+2.4. Performance metrics
+. Quant B computes:
+. Total Return
+. Sharpe Ratio
+. Max Drawdown
+. Annualized Volatility
+. Diversification Ratio
+. Correlation matrix (based on daily returns)
+. Implemented in:
+. quant_b/portfolio.py
+
+2.5. Streamlit interface
+. The interface allows the user to:
+. Select multiple tickers (multi-select)
+. Set start/end dates
+. Set initial capital
+. Choose an allocation method (Equal / MinVar / MaxSharpe / Custom)
+. Enable/disable MA Cross on portfolio
+. Tune MA parameters (short/long)
+. Run the backtest with a button
+. Display results:
+. Base-100 performance comparison (assets + portfolio + strategy)
+. Weights table
+. Correlation matrix
+. Drawdown curve
+. Metric cards (Return, Volatility, Sharpe, Diversification)
+. UI file:
+. quant_b/page_quant_b.py
+
+3. Project architecture
+. PROJET-PYTHON-GIT-LINUX/
+. app.py (Main Streamlit entry point)
+. requirements.txt (Python dependencies)
+. .streamlit/config.toml (Streamlit theme/config)
+. quant_b/
+. data_multi_asset.py (Multi-asset data download)
+. portfolio.py (Allocation, strategy, metrics)
+. page_quant_b.py (Quant B Streamlit UI)
+. __init__.py
+
+4. Installation and execution
+
+4.1. Clone the repository
+```bash
+git clone https://github.com/benjatt974/PROJET-PYTHON-GIT-LINUX.git
+cd PROJET-PYTHON-GIT-LINUX
+4.2. Create and activate a virtual environment
+
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+4.3. Install dependencies
+
+pip install -r requirements.txt
+
+
+4.4. Run the Streamlit app
+
+streamlit run app.py
+. The app runs at:
+. http://localhost:8501
+
+5 Scenario-based validation (coherent tests)
+
+5.1. Bull market / trending period
+. Example: 2020 → 2021 (QQQ/AAPL/MSFT/GLD)
+. Buy & Hold should perform strongly
+. Max Sharpe often performs well but may concentrate weights
+. Diversification reduces volatility and stabilizes drawdowns
+. Sharpe should be relatively high
+
+5.2. Bear market / stress period
+. Example: 2021 → 2022 (risk assets + bonds)
+. Buy & Hold can suffer large drawdowns
+. MA Cross reduces exposure and limits losses
+. Correlation matrix and diversification ratio become very useful
+
+6 Possible improvements (optional)
+. Add more allocation methods (Risk Parity, Equal Risk Contribution)
+. Add transaction costs / slippage
+. Add periodic rebalancing (weekly / monthly)
+. Add a signal chart (invested vs cash) for MA Cross
+. Add benchmark comparison (e.g., SPY)
+
+ 7 Authors
+. Project developed for the Python / Git / Linux course (ESILV).
+. Quant B module developed by: nathanaelboquet
