@@ -1,12 +1,11 @@
 import streamlit as st
 from quant_a.page_quant_a import run_quant_a_page
+from quant_b.page_quant_b import run_quant_b_page
 
-def main():
-    st.sidebar.title("Dashboard Quant")
-    page = st.sidebar.radio("Module", ["Quant A"])
+st.sidebar.title("Modules")
+page = st.sidebar.radio("Choisir un module", ["Quant A", "Quant B"])
 
-    if page == "Quant A":
-        run_quant_a_page()
-
-if __name__ == "__main__":
-    main()
+if page == "Quant A":
+    run_quant_a_page()
+else:
+    run_quant_b_page()
